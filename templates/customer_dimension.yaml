@@ -1,0 +1,116 @@
+name: Customer Dimension
+description: Standard customer dimension table for Power BI
+version: "1.0"
+domain: sales
+
+columns:
+  - name: customer_key
+    type: integer
+    role: key
+    generator: sequence
+    config:
+      start: 1
+
+  - name: customer_id
+    type: string
+    role: business_key
+    generator: pattern
+    config:
+      pattern: "CUST-{number:6}"
+
+  - name: first_name
+    type: string
+    generator: faker
+    config:
+      method: first_name
+
+  - name: last_name
+    type: string
+    generator: faker
+    config:
+      method: last_name
+
+  - name: email
+    type: string
+    generator: faker
+    config:
+      method: email
+
+  - name: phone
+    type: string
+    generator: faker
+    config:
+      method: phone_number
+
+  - name: company
+    type: string
+    generator: faker
+    config:
+      method: company
+
+  - name: address
+    type: string
+    generator: faker
+    config:
+      method: street_address
+
+  - name: city
+    type: string
+    generator: faker
+    config:
+      method: city
+
+  - name: state
+    type: string
+    generator: faker
+    config:
+      method: state
+
+  - name: country
+    type: string
+    generator: faker
+    config:
+      method: country
+
+  - name: postal_code
+    type: string
+    generator: faker
+    config:
+      method: postcode
+
+  - name: customer_segment
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Enterprise
+        - Mid-Market
+        - Small Business
+        - Consumer
+      weights: [0.1, 0.2, 0.3, 0.4]
+
+  - name: customer_status
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Active
+        - Inactive
+        - Churned
+        - Prospect
+      weights: [0.7, 0.1, 0.1, 0.1]
+
+  - name: created_date
+    type: date
+    generator: date_range
+    config:
+      start: "2015-01-01"
+      end: "2024-12-31"
+
+  - name: lifetime_value
+    type: float
+    generator: distribution
+    config:
+      type: lognormal
+      mean: 5000
+      sigma: 1.5

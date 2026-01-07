@@ -1,0 +1,154 @@
+name: Chart of Accounts
+description: Financial chart of accounts dimension for Power BI
+version: "1.0"
+domain: financial
+
+columns:
+  - name: account_key
+    type: integer
+    role: key
+    generator: sequence
+    config:
+      start: 1
+
+  - name: account_code
+    type: string
+    role: business_key
+    generator: hierarchical_code
+    config:
+      levels:
+        - prefix: ""
+          digits: 1
+        - prefix: ""
+          digits: 2
+        - prefix: ""
+          digits: 2
+
+  - name: account_name
+    type: string
+    generator: lookup
+    config:
+      source: account_type
+      mappings:
+        Asset:
+          - Cash and Cash Equivalents
+          - Accounts Receivable
+          - Inventory
+          - Prepaid Expenses
+          - Fixed Assets
+          - Accumulated Depreciation
+        Liability:
+          - Accounts Payable
+          - Accrued Expenses
+          - Short-term Debt
+          - Long-term Debt
+          - Deferred Revenue
+        Equity:
+          - Common Stock
+          - Retained Earnings
+          - Treasury Stock
+          - Additional Paid-in Capital
+        Revenue:
+          - Product Revenue
+          - Service Revenue
+          - Other Income
+          - Interest Income
+        Expense:
+          - Cost of Goods Sold
+          - Salaries and Wages
+          - Rent Expense
+          - Utilities
+          - Depreciation Expense
+          - Marketing Expense
+          - Professional Fees
+
+  - name: account_type
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Asset
+        - Liability
+        - Equity
+        - Revenue
+        - Expense
+      weights: [0.25, 0.15, 0.1, 0.2, 0.3]
+
+  - name: account_category
+    type: string
+    generator: dependent_choice
+    config:
+      depends_on: account_type
+      mappings:
+        Asset:
+          - Current Asset
+          - Non-Current Asset
+        Liability:
+          - Current Liability
+          - Long-term Liability
+        Equity:
+          - Shareholders Equity
+        Revenue:
+          - Operating Revenue
+          - Non-Operating Revenue
+        Expense:
+          - Operating Expense
+          - Non-Operating Expense
+
+  - name: normal_balance
+    type: string
+    generator: dependent_value
+    config:
+      depends_on: account_type
+      mappings:
+        Asset: Debit
+        Liability: Credit
+        Equity: Credit
+        Revenue: Credit
+        Expense: Debit
+
+  - name: parent_account_code
+    type: string
+    generator: hierarchical_parent
+    config:
+      source: account_code
+
+  - name: hierarchy_level
+    type: integer
+    generator: hierarchical_level
+    config:
+      source: account_code
+
+  - name: is_rollup
+    type: boolean
+    generator: formula
+    config:
+      formula: "hierarchy_level < 3"
+
+  - name: is_active
+    type: boolean
+    generator: choice
+    config:
+      choices: [true, false]
+      weights: [0.95, 0.05]
+
+  - name: gl_type
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Balance Sheet
+        - Income Statement
+
+hierarchy:
+  type: parent_child
+  key: account_code
+  parent: parent_account_code
+  name: account_name
+
+validations:
+  - rule: account_code is not null
+    message: Account code is required
+
+  - rule: account_type in ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']
+    message: Invalid account type

@@ -1,0 +1,107 @@
+name: Product Dimension
+description: Standard product dimension table for Power BI
+version: "1.0"
+domain: sales
+
+columns:
+  - name: product_key
+    type: integer
+    role: key
+    generator: sequence
+    config:
+      start: 1
+
+  - name: product_id
+    type: string
+    role: business_key
+    generator: pattern
+    config:
+      pattern: "PROD-{number:6}"
+
+  - name: product_name
+    type: string
+    generator: faker
+    config:
+      method: word
+      prefix: "Product "
+
+  - name: product_category
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Electronics
+        - Furniture
+        - Office Supplies
+        - Technology
+        - Accessories
+      weights: [0.25, 0.2, 0.25, 0.2, 0.1]
+
+  - name: product_subcategory
+    type: string
+    generator: dependent_choice
+    config:
+      depends_on: product_category
+      mappings:
+        Electronics:
+          - Phones
+          - Tablets
+          - Accessories
+        Furniture:
+          - Chairs
+          - Tables
+          - Bookcases
+        Office Supplies:
+          - Binders
+          - Paper
+          - Labels
+        Technology:
+          - Computers
+          - Copiers
+          - Machines
+        Accessories:
+          - Art
+          - Envelopes
+          - Fasteners
+
+  - name: brand
+    type: string
+    generator: faker
+    config:
+      method: company
+
+  - name: unit_cost
+    type: float
+    generator: distribution
+    config:
+      type: uniform
+      min: 5
+      max: 500
+
+  - name: unit_price
+    type: float
+    generator: formula
+    config:
+      formula: "unit_cost * (1 + random.uniform(0.2, 0.5))"
+
+  - name: weight_kg
+    type: float
+    generator: distribution
+    config:
+      type: uniform
+      min: 0.1
+      max: 50
+
+  - name: is_active
+    type: boolean
+    generator: choice
+    config:
+      choices: [true, false]
+      weights: [0.9, 0.1]
+
+  - name: launch_date
+    type: date
+    generator: date_range
+    config:
+      start: "2018-01-01"
+      end: "2024-06-30"

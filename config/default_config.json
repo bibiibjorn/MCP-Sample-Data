@@ -1,0 +1,37 @@
+{
+  "server": {
+    "name": "MCP-Sample-Data",
+    "version": "1.0.0"
+  },
+  "cache": {
+    "enabled": true,
+    "max_size": 100,
+    "ttl_seconds": 300
+  },
+  "generation": {
+    "default_locale": "en_US",
+    "max_rows_per_generation": 1000000,
+    "default_output_format": "csv"
+  },
+  "editing": {
+    "default_query_limit": 1000,
+    "max_query_limit": 100000,
+    "dry_run_default": true
+  },
+  "validation": {
+    "balance_tolerance": 0.01,
+    "referential_integrity_sample_size": 10000
+  },
+  "export": {
+    "default_format": "csv",
+    "parquet_compression": "snappy",
+    "csv_encoding": "utf-8"
+  },
+  "projects": {
+    "storage_path": "projects"
+  },
+  "logging": {
+    "level": "WARNING",
+    "file": "logs/sample_data.log"
+  }
+}

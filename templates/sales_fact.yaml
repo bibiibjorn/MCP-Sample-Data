@@ -1,0 +1,136 @@
+name: Sales Fact
+description: Sales fact table with measures for Power BI
+version: "1.0"
+domain: sales
+
+dimensions:
+  - name: date
+    key_column: date_key
+    reference_table: dim_date
+
+  - name: customer
+    key_column: customer_key
+    reference_table: dim_customer
+
+  - name: product
+    key_column: product_key
+    reference_table: dim_product
+
+columns:
+  - name: sales_key
+    type: integer
+    role: key
+    generator: sequence
+    config:
+      start: 1
+
+  - name: order_id
+    type: string
+    role: business_key
+    generator: pattern
+    config:
+      pattern: "ORD-{year}-{number:8}"
+
+  - name: date_key
+    type: integer
+    role: foreign_key
+    generator: dimension_lookup
+    config:
+      dimension: date
+      distribution: weighted_recent
+
+  - name: customer_key
+    type: integer
+    role: foreign_key
+    generator: dimension_lookup
+    config:
+      dimension: customer
+      distribution: pareto
+      pareto_alpha: 1.5
+
+  - name: product_key
+    type: integer
+    role: foreign_key
+    generator: dimension_lookup
+    config:
+      dimension: product
+      distribution: uniform
+
+  - name: quantity
+    type: integer
+    role: measure
+    generator: distribution
+    config:
+      type: poisson
+      lambda: 3
+      min: 1
+      max: 100
+
+  - name: unit_price
+    type: float
+    role: measure
+    generator: dimension_lookup
+    config:
+      dimension: product
+      column: unit_price
+
+  - name: discount_pct
+    type: float
+    role: measure
+    generator: distribution
+    config:
+      type: choice
+      choices: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+      weights: [0.5, 0.15, 0.15, 0.1, 0.05, 0.03, 0.02]
+
+  - name: sales_amount
+    type: float
+    role: measure
+    generator: formula
+    config:
+      formula: "quantity * unit_price * (1 - discount_pct)"
+
+  - name: cost_amount
+    type: float
+    role: measure
+    generator: formula
+    config:
+      formula: "quantity * unit_cost"
+
+  - name: profit_amount
+    type: float
+    role: measure
+    generator: formula
+    config:
+      formula: "sales_amount - cost_amount"
+
+  - name: shipping_cost
+    type: float
+    role: measure
+    generator: distribution
+    config:
+      type: uniform
+      min: 5
+      max: 50
+
+  - name: order_status
+    type: string
+    generator: choice
+    config:
+      choices:
+        - Delivered
+        - Shipped
+        - Processing
+        - Cancelled
+        - Returned
+      weights: [0.7, 0.1, 0.1, 0.05, 0.05]
+
+validations:
+  - rule: quantity > 0
+    message: Quantity must be positive
+
+  - rule: sales_amount >= 0
+    message: Sales amount cannot be negative
+
+  - rule: discount_pct >= 0 and discount_pct <= 1
+    message: Discount percentage must be between 0 and 1
