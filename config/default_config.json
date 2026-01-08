@@ -1,7 +1,7 @@
 {
   "server": {
     "name": "MCP-Sample-Data",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "cache": {
     "enabled": true,
@@ -11,24 +11,92 @@
   "generation": {
     "default_locale": "en_US",
     "max_rows_per_generation": 1000000,
-    "default_output_format": "csv"
+    "default_output_format": "csv",
+    "default_seed": null
+  },
+  "time_patterns": {
+    "default_pattern": "retail_seasonal",
+    "default_noise_std": 0.10,
+    "patterns_dir": "config/time_patterns"
+  },
+  "correlations": {
+    "default_correlation_strength": 0.7,
+    "patterns_dir": "config/correlations"
+  },
+  "currency": {
+    "base_currency": "USD",
+    "default_volatility": 0.01,
+    "supported_currencies": ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY"]
+  },
+  "industry_templates": {
+    "available": ["retail", "healthcare", "manufacturing", "banking", "insurance", "telecom"],
+    "default_scale_factor": 1.0
   },
   "editing": {
     "default_query_limit": 1000,
-    "max_query_limit": 100000,
+    "max_query_limit": 200000,
+    "preview_limit": 100,
+    "sample_limit": 50,
     "dry_run_default": true
+  },
+  "response": {
+    "default_row_limit": 1000,
+    "max_row_limit": 50000,
+    "sample_row_limit": 100,
+    "max_string_length": 200,
+    "max_list_items": 50,
+    "top_values_limit": 20,
+    "violation_sample_limit": 10,
+    "max_response_chars": 500000,
+    "enable_pagination": true,
+    "default_page_size": 100
   },
   "validation": {
     "balance_tolerance": 0.01,
     "referential_integrity_sample_size": 10000
   },
+  "quality": {
+    "dimensions": {
+      "completeness": 0.25,
+      "validity": 0.20,
+      "uniqueness": 0.15,
+      "accuracy": 0.15,
+      "consistency": 0.15,
+      "timeliness": 0.10
+    },
+    "grade_thresholds": {
+      "A": 90,
+      "B": 80,
+      "C": 70,
+      "D": 60,
+      "F": 0
+    },
+    "default_rules_file": "config/quality/default_rules.yaml"
+  },
+  "privacy": {
+    "sample_size": 1000,
+    "confidence_threshold": 0.5,
+    "default_strategies": {
+      "email": "mask",
+      "phone": "mask",
+      "ssn": "redact",
+      "credit_card": "mask",
+      "name": "synthetic",
+      "address": "synthetic",
+      "date_of_birth": "generalize"
+    },
+    "gdpr_special_categories": ["ethnicity", "religion", "political", "biometric", "genetic", "health"]
+  },
+  "subsetting": {
+    "default_strategy": "random",
+    "default_percentage": 10,
+    "max_subset_rows": 100000,
+    "preserve_proportions": true
+  },
   "export": {
     "default_format": "csv",
     "parquet_compression": "snappy",
     "csv_encoding": "utf-8"
-  },
-  "projects": {
-    "storage_path": "projects"
   },
   "logging": {
     "level": "WARNING",

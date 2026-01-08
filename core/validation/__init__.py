@@ -4,5 +4,6 @@ from core.validation.error_handler import ErrorHandler
 from core.validation.balance_checker import BalanceChecker
 from core.validation.referential_checker import ReferentialChecker
 from core.validation.rule_engine import RuleEngine
+from core.validation.statistical_validator import StatisticalValidator
 
-__all__ = ['ErrorHandler', 'BalanceChecker', 'ReferentialChecker', 'RuleEngine']
+__all__ = ['ErrorHandler', 'BalanceChecker', 'ReferentialChecker', 'RuleEngine', 'StatisticalValidator']

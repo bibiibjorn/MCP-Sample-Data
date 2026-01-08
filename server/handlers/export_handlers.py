@@ -8,6 +8,7 @@ import os
 
 from core.export import CSVExporter, ParquetExporter, PowerBIOptimizer
 from server.tool_schemas import TOOL_SCHEMAS
+from server.handlers.file_utils import read_data_file
 
 
 def register_export_handlers(registry):
@@ -23,20 +24,12 @@ def register_export_handlers(registry):
         output_path: str,
         delimiter: str = ','
     ) -> Dict[str, Any]:
-        """Export to CSV format"""
+        """Export to CSV format (reads CSV, Excel, or Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            elif ext in ['.xlsx', '.xls']:
-                df = pl.read_excel(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = csv_exporter.export(
                 df=df,
@@ -65,20 +58,12 @@ def register_export_handlers(registry):
         output_path: str,
         compression: str = 'snappy'
     ) -> Dict[str, Any]:
-        """Export to Parquet format"""
+        """Export to Parquet format (reads CSV, Excel, or Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            elif ext in ['.xlsx', '.xls']:
-                df = pl.read_excel(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = parquet_exporter.export(
                 df=df,
@@ -107,20 +92,12 @@ def register_export_handlers(registry):
         output_path: str,
         table_type: str = 'dimension'
     ) -> Dict[str, Any]:
-        """Optimize data for Power BI"""
+        """Optimize data for Power BI (reads CSV, Excel, or Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            elif ext in ['.xlsx', '.xls']:
-                df = pl.read_excel(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             # Optimize
             opt_result = powerbi_optimizer.optimize_for_powerbi(

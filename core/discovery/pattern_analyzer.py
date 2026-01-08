@@ -109,6 +109,33 @@ class PatternAnalyzer:
         }
 
 
+    def analyze_column(self, df: pl.DataFrame, column_name: str) -> Dict[str, Any]:
+        """
+        Analyze patterns in a specific column of a DataFrame.
+
+        Args:
+            df: DataFrame containing the column
+            column_name: Name of the column to analyze
+
+        Returns:
+            Pattern analysis results with 'patterns' key for compatibility
+        """
+        if column_name not in df.columns:
+            return {'patterns': [], 'error': f'Column not found: {column_name}'}
+
+        col_data = df[column_name]
+        result = self.analyze(col_data, column_name)
+
+        # Map 'patterns_detected' to 'patterns' for handler compatibility
+        return {
+            'patterns': result.get('patterns_detected', []),
+            'likely_type': result.get('likely_type', 'unknown'),
+            'sample_values': result.get('sample_values', []),
+            'value_characteristics': result.get('value_characteristics'),
+            'string_characteristics': result.get('string_characteristics')
+        }
+
+
 def detect_patterns(col_data: pl.Series) -> List[Dict[str, Any]]:
     """Convenience function to detect patterns in a column"""
     analyzer = PatternAnalyzer()

@@ -125,6 +125,7 @@ class DateDimensionGenerator:
 
             return {
                 'success': True,
+                'df': df,
                 'table_name': 'dim_date',
                 'row_count': len(df),
                 'columns': df.columns,

@@ -8,11 +8,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Token optimization constants
+MAX_UNIQUE_SAMPLE = 10000       # Max unique values to compare (prevents memory issues on large columns)
+SAMPLE_MATCH_LIMIT = 5          # Sample matches to return in response
+RELATIONSHIP_LIMIT = 50         # Max relationships to return per query
+
 
 class RelationshipFinder:
     """Finds relationships between tables"""
 
-    def __init__(self, confidence_threshold: float = 0.7):
+    def __init__(self, confidence_threshold: float = 0.3):
+        # Lower threshold (0.3) to detect potential relationships even with
+        # partial value overlap - useful for data quality analysis and
+        # finding relationships where column names don't match
         self.confidence_threshold = confidence_threshold
 
     def find(self, tables: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -23,7 +31,7 @@ class RelationshipFinder:
             tables: Dict of table_name -> {'path': str, 'df': DataFrame}
 
         Returns:
-            List of detected relationships
+            List of detected relationships (limited for token efficiency)
         """
         relationships = []
         table_names = list(tables.keys())
@@ -41,10 +49,10 @@ class RelationshipFinder:
                 )
                 relationships.extend(matches)
 
-        # Sort by confidence
+        # Sort by confidence and limit results
         relationships.sort(key=lambda x: -x.get('confidence', 0))
 
-        return relationships
+        return relationships[:RELATIONSHIP_LIMIT]
 
     def _find_column_matches(
         self,
@@ -56,8 +64,22 @@ class RelationshipFinder:
         """Find matching columns between two tables"""
         matches = []
 
+        # Minimum unique values to consider a column for relationships
+        # Avoids false positives from empty/near-empty columns
+        MIN_UNIQUE_VALUES = 3
+
         for col1 in df1.columns:
+            # Skip columns with too few unique values
+            unique1 = df1[col1].drop_nulls().n_unique()
+            if unique1 < MIN_UNIQUE_VALUES:
+                continue
+
             for col2 in df2.columns:
+                # Skip columns with too few unique values
+                unique2 = df2[col2].drop_nulls().n_unique()
+                if unique2 < MIN_UNIQUE_VALUES:
+                    continue
+
                 # Skip if different types
                 if not self._compatible_types(df1[col1].dtype, df2[col2].dtype):
                     continue
@@ -105,7 +127,7 @@ class RelationshipFinder:
         col2_name: str,
         col2_data: pl.Series
     ) -> Dict[str, Any]:
-        """Calculate match score between two columns"""
+        """Calculate match score between two columns with memory-efficient sampling."""
         reasoning = []
         confidence = 0.0
 
@@ -113,51 +135,74 @@ class RelationshipFinder:
         name_similarity = self._name_similarity(col1_name, col2_name)
         if name_similarity > 0.8:
             confidence += 0.3
-            reasoning.append(f"Column names are similar ({name_similarity:.2f})")
+            reasoning.append(f"Similar names ({name_similarity:.0%})")
         elif name_similarity > 0.5:
             confidence += 0.15
-            reasoning.append(f"Column names have some similarity ({name_similarity:.2f})")
+            reasoning.append(f"Some name similarity ({name_similarity:.0%})")
 
-        # Check value overlap
+        # Check value overlap with memory-efficient sampling
         try:
-            vals1 = set(col1_data.unique().drop_nulls().to_list())
-            vals2 = set(col2_data.unique().drop_nulls().to_list())
+            # Get unique counts first (cheap operation)
+            unique1 = col1_data.n_unique()
+            unique2 = col2_data.n_unique()
+
+            # Use sampling for high-cardinality columns to save memory
+            if unique1 > MAX_UNIQUE_SAMPLE or unique2 > MAX_UNIQUE_SAMPLE:
+                # Sample-based estimation for large columns
+                sample1 = col1_data.drop_nulls().unique().head(MAX_UNIQUE_SAMPLE)
+                sample2 = col2_data.drop_nulls().unique().head(MAX_UNIQUE_SAMPLE)
+                vals1 = set(sample1.to_list())
+                vals2 = set(sample2.to_list())
+                is_sampled = True
+            else:
+                vals1 = set(col1_data.unique().drop_nulls().to_list())
+                vals2 = set(col2_data.unique().drop_nulls().to_list())
+                is_sampled = False
 
             if vals1 and vals2:
                 overlap = len(vals1 & vals2)
                 max_overlap = min(len(vals1), len(vals2))
                 overlap_ratio = overlap / max_overlap if max_overlap > 0 else 0
 
+                # Value overlap is a strong signal - increase confidence boosts
                 if overlap_ratio > 0.9:
-                    confidence += 0.5
-                    reasoning.append(f"High value overlap ({overlap_ratio:.0%})")
+                    confidence += 0.7
+                    reasoning.append(f"High overlap ({overlap_ratio:.0%})")
                 elif overlap_ratio > 0.5:
+                    confidence += 0.5
+                    reasoning.append(f"Moderate overlap ({overlap_ratio:.0%})")
+                elif overlap_ratio > 0.2:
                     confidence += 0.3
-                    reasoning.append(f"Moderate value overlap ({overlap_ratio:.0%})")
-                elif overlap_ratio > 0.1:
-                    confidence += 0.1
-                    reasoning.append(f"Some value overlap ({overlap_ratio:.0%})")
+                    reasoning.append(f"Some overlap ({overlap_ratio:.0%})")
+                elif overlap_ratio > 0.05:
+                    confidence += 0.15
+                    reasoning.append(f"Minimal overlap ({overlap_ratio:.0%})")
+
+                if is_sampled:
+                    reasoning.append("(sampled)")
 
                 # Determine relationship type
-                unique1 = col1_data.n_unique()
-                unique2 = col2_data.n_unique()
                 len1 = len(col1_data)
                 len2 = len(col2_data)
 
                 if unique1 == len1 and unique2 < len2:
                     rel_type = '1:N'
-                    reasoning.append(f"{col1_name} appears to be unique (primary key)")
+                    reasoning.append(f"{col1_name}: PK candidate")
                 elif unique2 == len2 and unique1 < len1:
                     rel_type = 'N:1'
-                    reasoning.append(f"{col2_name} appears to be unique (primary key)")
+                    reasoning.append(f"{col2_name}: PK candidate")
                 elif unique1 == len1 and unique2 == len2:
                     rel_type = '1:1'
-                    reasoning.append("Both columns appear to be unique")
                 else:
                     rel_type = 'N:N'
 
-                # Get sample matches
-                sample_matches = list(vals1 & vals2)[:5]
+                # Get sample matches (truncate long values)
+                sample_matches = []
+                for val in list(vals1 & vals2)[:SAMPLE_MATCH_LIMIT]:
+                    if isinstance(val, str) and len(val) > 50:
+                        sample_matches.append(val[:47] + '...')
+                    else:
+                        sample_matches.append(val)
 
                 return {
                     'confidence': round(min(confidence, 1.0), 2),
@@ -203,6 +248,54 @@ class RelationshipFinder:
         overlap = len(chars1 & chars2) / max(len(chars1), len(chars2))
 
         return overlap
+
+    def find_relationships(
+        self,
+        dataframes: Dict[str, pl.DataFrame],
+        primary_file: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Find potential relationships between multiple files.
+
+        Args:
+            dataframes: Dict of file_path -> DataFrame
+            primary_file: Optional primary file to focus on
+
+        Returns:
+            Relationship discovery results
+        """
+        try:
+            # Convert dataframes dict to the format expected by find()
+            tables = {
+                path: {'path': path, 'df': df}
+                for path, df in dataframes.items()
+            }
+
+            relationships = self.find(tables)
+
+            # If primary file specified, prioritize relationships involving it
+            if primary_file:
+                primary_rels = [
+                    r for r in relationships
+                    if r.get('source_table') == primary_file or r.get('target_table') == primary_file
+                ]
+                other_rels = [
+                    r for r in relationships
+                    if r not in primary_rels
+                ]
+                relationships = primary_rels + other_rels
+
+            return {
+                'success': True,
+                'file_count': len(dataframes),
+                'relationships_found': len(relationships),
+                'relationships': relationships,
+                'primary_file': primary_file
+            }
+
+        except Exception as e:
+            logger.error(f"Error finding relationships: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
 
     def suggest_star_schema(self, tables: Dict[str, Dict[str, Any]], relationships: List[Dict]) -> Dict[str, Any]:
         """Suggest a star schema design based on detected relationships"""

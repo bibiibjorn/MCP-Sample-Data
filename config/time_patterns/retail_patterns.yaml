@@ -1,0 +1,169 @@
+# Retail Time Series Patterns
+# Use these patterns for retail/commerce data generation
+
+retail_seasonal:
+  description: Standard retail pattern with holiday peaks and weekend boosts
+  monthly_weights:
+    1: 0.85   # January - post-holiday slump
+    2: 0.80   # February - lowest month
+    3: 0.90   # March - spring uptick
+    4: 0.95   # April - Easter period
+    5: 1.00   # May - Mother's Day
+    6: 0.95   # June - early summer
+    7: 0.90   # July - summer lull
+    8: 0.95   # August - back to school
+    9: 1.00   # September - fall season
+    10: 1.05  # October - Halloween prep
+    11: 1.40  # November - Black Friday month
+    12: 1.60  # December - Holiday shopping
+  day_of_week:
+    monday: 0.85
+    tuesday: 0.90
+    wednesday: 0.95
+    thursday: 1.00
+    friday: 1.15
+    saturday: 1.20
+    sunday: 0.95
+  special_events:
+    - name: Black Friday
+      date: fourth_thursday_november+1
+      multiplier: 3.5
+      duration_days: 1
+    - name: Cyber Monday
+      date: fourth_thursday_november+4
+      multiplier: 2.5
+      duration_days: 1
+    - name: Christmas Eve
+      date: 12-24
+      multiplier: 2.0
+      duration_days: 1
+    - name: Boxing Day
+      date: 12-26
+      multiplier: 1.8
+      duration_days: 2
+    - name: New Year Sale
+      date: 01-01
+      multiplier: 1.5
+      duration_days: 3
+    - name: Valentine's Day
+      date: 02-14
+      multiplier: 1.4
+      duration_days: 1
+    - name: Easter Weekend
+      date: first_sunday_april  # Approximate
+      multiplier: 1.3
+      duration_days: 2
+    - name: Mother's Day
+      date: second_sunday_may
+      multiplier: 1.4
+      duration_days: 1
+    - name: Father's Day
+      date: third_sunday_june
+      multiplier: 1.2
+      duration_days: 1
+    - name: Memorial Day Weekend
+      date: last_monday_may
+      multiplier: 1.3
+      duration_days: 3
+    - name: July 4th
+      date: 07-04
+      multiplier: 1.3
+      duration_days: 1
+    - name: Labor Day Weekend
+      date: first_monday_september
+      multiplier: 1.3
+      duration_days: 3
+  noise_std: 0.10
+
+grocery_weekly:
+  description: Grocery store pattern - weekly shopping cycles
+  day_of_week:
+    monday: 0.75
+    tuesday: 0.80
+    wednesday: 0.85
+    thursday: 0.90
+    friday: 1.10
+    saturday: 1.35
+    sunday: 1.25
+  monthly_weights:
+    1: 1.05   # New Year resolutions
+    2: 0.95
+    3: 1.00
+    4: 1.00
+    5: 1.05   # BBQ season starts
+    6: 1.05
+    7: 1.10   # Summer peak
+    8: 1.05
+    9: 0.95
+    10: 1.00
+    11: 1.15  # Thanksgiving prep
+    12: 1.20  # Holiday cooking
+  special_events:
+    - name: Super Bowl Sunday
+      date: first_sunday_february
+      multiplier: 1.5
+      duration_days: 2
+    - name: Thanksgiving Week
+      date: fourth_thursday_november
+      multiplier: 1.8
+      duration_days: 3
+  noise_std: 0.08
+
+ecommerce_flash:
+  description: E-commerce with flash sale patterns
+  day_of_week:
+    monday: 1.10   # Cyber Monday spillover
+    tuesday: 1.00
+    wednesday: 0.95
+    thursday: 1.00
+    friday: 0.90   # People go out
+    saturday: 0.85
+    sunday: 1.15   # Sunday browsing
+  monthly_weights:
+    1: 0.90
+    2: 0.85
+    3: 0.95
+    4: 1.00
+    5: 1.00
+    6: 0.95
+    7: 1.10   # Prime Day
+    8: 0.95
+    9: 1.00
+    10: 1.05
+    11: 1.50  # Black Friday/Cyber Monday
+    12: 1.45
+  special_events:
+    - name: Prime Day
+      date: 07-15
+      multiplier: 2.5
+      duration_days: 2
+    - name: Singles Day
+      date: 11-11
+      multiplier: 2.0
+      duration_days: 1
+  noise_std: 0.15
+
+luxury_retail:
+  description: Luxury goods - less seasonal, more event-driven
+  monthly_weights:
+    1: 0.70
+    2: 0.95   # Valentine's
+    3: 0.85
+    4: 0.90
+    5: 1.00   # Mother's Day
+    6: 1.00
+    7: 0.85   # Summer travel
+    8: 0.90
+    9: 0.95
+    10: 1.00
+    11: 1.20
+    12: 1.60  # Holiday gifting peak
+  day_of_week:
+    monday: 0.80
+    tuesday: 0.85
+    wednesday: 0.90
+    thursday: 0.95
+    friday: 1.10
+    saturday: 1.25
+    sunday: 1.15
+  noise_std: 0.12

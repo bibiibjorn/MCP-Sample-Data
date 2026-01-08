@@ -15,6 +15,16 @@ class BalanceChecker:
     def __init__(self, tolerance: float = 0.01):
         self.tolerance = tolerance
 
+    def check(
+        self,
+        df: pl.DataFrame,
+        debit_column: str,
+        credit_column: str,
+        group_by: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Alias for check_balance() for API consistency."""
+        return self.check_balance(df, debit_column, credit_column, group_by)
+
     def check_balance(
         self,
         df: pl.DataFrame,

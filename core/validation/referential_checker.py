@@ -3,10 +3,27 @@ Referential Integrity Checker Module
 Validates foreign key relationships between tables
 """
 import polars as pl
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Token optimization constants
+SAMPLE_ORPHAN_LIMIT = 10        # Max orphan values to show
+SAMPLE_UNUSED_LIMIT = 10        # Max unused dimension values to show
+MAX_UNIQUE_COMPARE = 100000     # Max unique values to compare (use sampling above)
+MAX_VALUE_LENGTH = 50           # Truncate long values
+
+
+def _truncate_values(values: List[Any], limit: int, max_len: int = MAX_VALUE_LENGTH) -> List[Any]:
+    """Truncate list and individual string values for token efficiency."""
+    result = []
+    for v in values[:limit]:
+        if isinstance(v, str) and len(v) > max_len:
+            result.append(v[:max_len - 3] + '...')
+        else:
+            result.append(v)
+    return result
 
 
 class ReferentialChecker:
@@ -14,6 +31,61 @@ class ReferentialChecker:
 
     def __init__(self, sample_size: int = 10000):
         self.sample_size = sample_size
+
+    def check(
+        self,
+        fact_df: pl.DataFrame,
+        dimensions: Dict[str, pl.DataFrame],
+        key_mappings: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """
+        Check referential integrity between a fact table and multiple dimensions.
+
+        Args:
+            fact_df: Fact table DataFrame
+            dimensions: Dict mapping dimension name to DataFrame
+            key_mappings: Dict mapping fact column to dimension name
+
+        Returns:
+            Integrity check results for all relationships
+        """
+        try:
+            results = []
+            all_valid = True
+
+            for fact_key, dim_name in key_mappings.items():
+                if dim_name not in dimensions:
+                    results.append({
+                        'fact_key': fact_key,
+                        'dimension': dim_name,
+                        'success': False,
+                        'error': f'Dimension not found: {dim_name}'
+                    })
+                    all_valid = False
+                    continue
+
+                dim_df = dimensions[dim_name]
+                # Assume dimension key has same name as fact key, or use first column
+                dim_key = fact_key if fact_key in dim_df.columns else dim_df.columns[0]
+
+                check_result = self.check_integrity(fact_df, dim_df, fact_key, dim_key)
+                check_result['fact_key'] = fact_key
+                check_result['dimension'] = dim_name
+                check_result['dimension_key'] = dim_key
+                results.append(check_result)
+
+                if check_result.get('success') and not check_result.get('integrity_valid', True):
+                    all_valid = False
+
+            return {
+                'success': True,
+                'all_valid': all_valid,
+                'checks': results
+            }
+
+        except Exception as e:
+            logger.error(f"Error in check: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
 
     def check_integrity(
         self,
@@ -70,15 +142,17 @@ class ReferentialChecker:
                 }
             }
 
-            # Add sample of orphan values
+            # Add sample of orphan values (truncated for token efficiency)
             if orphan_values:
-                sample_orphans = list(orphan_values)[:10]
-                result['sample_orphan_values'] = sample_orphans
+                result['sample_orphans'] = _truncate_values(
+                    list(orphan_values), SAMPLE_ORPHAN_LIMIT
+                )
 
-            # Add sample of unused dimension values
+            # Add sample of unused dimension values (truncated)
             if unused_dim_values:
-                sample_unused = list(unused_dim_values)[:10]
-                result['sample_unused_dimension_values'] = sample_unused
+                result['sample_unused'] = _truncate_values(
+                    list(unused_dim_values), SAMPLE_UNUSED_LIMIT
+                )
 
             return result
 
@@ -133,7 +207,10 @@ class ReferentialChecker:
             }
 
             if orphan_values:
-                result['sample_orphan_keys'] = list(orphan_values)[:5]
+                # Truncate composite keys for token efficiency
+                result['sample_orphan_keys'] = _truncate_values(
+                    list(orphan_values), 5
+                )
 
             return result
 

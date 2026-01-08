@@ -1,0 +1,128 @@
+# Financial Time Series Patterns
+# Use these patterns for financial/accounting data generation
+
+financial_quarterly:
+  description: Financial pattern with quarter-end and year-end spikes
+  quarterly_weights:
+    1: 0.90   # Q1 - start slow
+    2: 0.95   # Q2
+    3: 1.05   # Q3
+    4: 1.10   # Q4 - budget flush
+  monthly_weights:
+    1: 0.85   # January - new year slow start
+    2: 0.90
+    3: 1.25   # Q1 close
+    4: 0.85
+    5: 0.90
+    6: 1.25   # Q2 close / Mid-year
+    7: 0.85
+    8: 0.90
+    9: 1.25   # Q3 close
+    10: 0.90
+    11: 0.95
+    12: 1.30  # Year-end / Q4 close
+  day_of_week:
+    monday: 1.10   # Week start activity
+    tuesday: 1.05
+    wednesday: 1.00
+    thursday: 0.95
+    friday: 0.90   # Early close trend
+    saturday: 0.0  # Markets closed
+    sunday: 0.0
+  noise_std: 0.08
+
+banking_transactions:
+  description: Banking transaction volumes - payroll cycles
+  monthly_weights:
+    1: 0.95
+    2: 0.90
+    3: 1.00
+    4: 1.05   # Tax season
+    5: 1.00
+    6: 1.00
+    7: 0.95
+    8: 0.95
+    9: 1.00
+    10: 1.00
+    11: 1.05
+    12: 1.10  # Holiday spending
+  day_of_week:
+    monday: 1.15   # Weekend catchup
+    tuesday: 1.10
+    wednesday: 1.00
+    thursday: 0.95
+    friday: 1.20   # Payday for many
+    saturday: 0.40
+    sunday: 0.20
+  special_events:
+    - name: Tax Day
+      date: 04-15
+      multiplier: 1.8
+      duration_days: 3
+    - name: Month End
+      date: 01-31
+      multiplier: 1.3
+  noise_std: 0.10
+
+investment_trading:
+  description: Investment trading volumes
+  day_of_week:
+    monday: 1.15   # Monday effect
+    tuesday: 1.00
+    wednesday: 1.00
+    thursday: 0.95
+    friday: 1.10   # Position adjustments
+    saturday: 0.0
+    sunday: 0.0
+  monthly_weights:
+    1: 1.15   # January effect
+    2: 0.95
+    3: 1.05
+    4: 1.00
+    5: 0.95   # Sell in May
+    6: 0.90
+    7: 0.85   # Summer doldrums
+    8: 0.85
+    9: 1.00
+    10: 1.10  # Volatility
+    11: 1.05
+    12: 0.90  # Tax loss harvesting, low volume
+  special_events:
+    - name: Triple Witching March
+      date: third_friday_march
+      multiplier: 1.8
+    - name: Triple Witching June
+      date: third_friday_june
+      multiplier: 1.8
+    - name: Triple Witching September
+      date: third_friday_september
+      multiplier: 1.8
+    - name: Triple Witching December
+      date: third_friday_december
+      multiplier: 1.8
+  noise_std: 0.15
+
+insurance_claims:
+  description: Insurance claims pattern
+  monthly_weights:
+    1: 1.10   # Winter accidents
+    2: 1.05
+    3: 0.95
+    4: 1.00
+    5: 1.05
+    6: 1.15   # Summer travel
+    7: 1.20   # Peak summer
+    8: 1.15
+    9: 1.00
+    10: 1.00
+    11: 1.10  # Thanksgiving travel
+    12: 1.15  # Holiday travel
+  day_of_week:
+    monday: 1.20   # Weekend incidents reported
+    tuesday: 1.00
+    wednesday: 0.95
+    thursday: 0.95
+    friday: 1.00
+    saturday: 0.90
+    sunday: 0.80
+  noise_std: 0.12

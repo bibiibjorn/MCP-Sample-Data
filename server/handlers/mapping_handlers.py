@@ -8,6 +8,7 @@ import os
 
 from core.mapping import MappingDiscovery, MappingManager, HierarchyAnalyzer, ContextLoader, CrossFileValidator
 from server.tool_schemas import TOOL_SCHEMAS
+from server.handlers.file_utils import read_data_file
 
 
 def register_mapping_handlers(registry):
@@ -84,61 +85,60 @@ def register_mapping_handlers(registry):
         schema.get('required', [])
     )
 
-    # 08_validate_balance_sheet
-    def validate_balance_sheet(
+    # 08_validate_amounts
+    def validate_amounts(
         source_file: str,
-        mapping_file: str,
         amount_column: str,
-        category_column: str
+        group_column: str,
+        validation_rule: Dict[str, Any],
+        mapping_file: Optional[str] = None,
+        mapping_source_column: Optional[str] = None,
+        mapping_target_column: Optional[str] = None,
+        tolerance: float = 0.01
     ) -> Dict[str, Any]:
-        """Validate balance sheet equation"""
+        """Validate amounts using user-defined rules (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(source_file):
             return {'success': False, 'error': f'Source file not found: {source_file}'}
-        if not os.path.exists(mapping_file):
-            return {'success': False, 'error': f'Mapping file not found: {mapping_file}'}
 
         try:
-            # Load files
-            ext = os.path.splitext(source_file)[1].lower()
-            if ext == '.csv':
-                source_df = pl.read_csv(source_file)
-            elif ext == '.parquet':
-                source_df = pl.read_parquet(source_file)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            # Load source file
+            source_df = read_data_file(source_file)
 
-            ext = os.path.splitext(mapping_file)[1].lower()
-            if ext == '.csv':
-                mapping_df = pl.read_csv(mapping_file)
-            elif ext == '.parquet':
-                mapping_df = pl.read_parquet(mapping_file)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            # Load mapping file if provided
+            mapping_df = None
+            if mapping_file:
+                if not os.path.exists(mapping_file):
+                    return {'success': False, 'error': f'Mapping file not found: {mapping_file}'}
+                mapping_df = read_data_file(mapping_file)
 
-            # Auto-detect mapping columns
-            mapping_source_col = None
-            mapping_category_col = None
+                # Auto-detect mapping columns if not specified
+                if not mapping_source_column:
+                    for col in mapping_df.columns:
+                        col_lower = col.lower()
+                        if 'source' in col_lower or 'from' in col_lower or 'code' in col_lower:
+                            mapping_source_column = col
+                            break
+                    if not mapping_source_column:
+                        mapping_source_column = mapping_df.columns[0]
 
-            for col in mapping_df.columns:
-                col_lower = col.lower()
-                if 'source' in col_lower or 'from' in col_lower or 'code' in col_lower:
-                    mapping_source_col = col
-                if 'category' in col_lower or 'type' in col_lower or 'class' in col_lower:
-                    mapping_category_col = col
+                if not mapping_target_column:
+                    for col in mapping_df.columns:
+                        col_lower = col.lower()
+                        if 'target' in col_lower or 'to' in col_lower or 'category' in col_lower or 'group' in col_lower:
+                            mapping_target_column = col
+                            break
+                    if not mapping_target_column:
+                        mapping_target_column = mapping_df.columns[-1] if len(mapping_df.columns) > 1 else mapping_df.columns[0]
 
-            if not mapping_source_col:
-                mapping_source_col = mapping_df.columns[0]
-            if not mapping_category_col:
-                mapping_category_col = mapping_df.columns[-1]
-
-            result = cross_file_validator.validate_balance_sheet_equation(
+            result = cross_file_validator.validate_amounts(
                 source_df=source_df,
-                mapping_df=mapping_df,
                 amount_column=amount_column,
-                category_column=category_column,
-                mapping_source_column=mapping_source_col,
-                mapping_target_column=mapping_source_col,
-                mapping_category_column=mapping_category_col
+                group_column=group_column,
+                validation_rule=validation_rule,
+                mapping_df=mapping_df,
+                mapping_source_column=mapping_source_column,
+                mapping_target_column=mapping_target_column,
+                tolerance=tolerance
             )
 
             return result
@@ -146,10 +146,10 @@ def register_mapping_handlers(registry):
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    schema = TOOL_SCHEMAS['08_validate_balance_sheet']
+    schema = TOOL_SCHEMAS['08_validate_amounts']
     registry.register(
-        '08_validate_balance_sheet',
-        validate_balance_sheet,
+        '08_validate_amounts',
+        validate_amounts,
         'mapping',
         schema['description'],
         schema['parameters'],
@@ -191,13 +191,17 @@ def register_mapping_handlers(registry):
     # 08_query_context
     def query_context(
         context_name: str,
-        query: str
+        query: str,
+        limit: Optional[int] = None,
+        include_data: bool = True
     ) -> Dict[str, Any]:
-        """Query a loaded context"""
+        """Query a loaded context with automatic row limiting for token efficiency"""
         try:
             result = context_loader.query_context(
                 context_name=context_name,
-                query=query
+                query=query,
+                limit=limit,
+                include_data=include_data
             )
 
             return result
@@ -221,18 +225,12 @@ def register_mapping_handlers(registry):
         parent_column: Optional[str] = None,
         child_column: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Analyze hierarchical structure"""
+        """Analyze hierarchical structure (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = hierarchy_analyzer.analyze_hierarchy(
                 df=df,
@@ -264,7 +262,7 @@ def register_mapping_handlers(registry):
         amount_column: str,
         target_rollup: str
     ) -> Dict[str, Any]:
-        """Roll up data through hierarchy"""
+        """Roll up data through hierarchy (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(source_file):
             return {'success': False, 'error': f'Source file not found: {source_file}'}
         if not os.path.exists(formula_file):
@@ -272,21 +270,8 @@ def register_mapping_handlers(registry):
 
         try:
             # Load files
-            ext = os.path.splitext(source_file)[1].lower()
-            if ext == '.csv':
-                source_df = pl.read_csv(source_file)
-            elif ext == '.parquet':
-                source_df = pl.read_parquet(source_file)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
-
-            ext = os.path.splitext(formula_file)[1].lower()
-            if ext == '.csv':
-                formula_df = pl.read_csv(formula_file)
-            elif ext == '.parquet':
-                formula_df = pl.read_parquet(formula_file)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            source_df = read_data_file(source_file)
+            formula_df = read_data_file(formula_file)
 
             # Auto-detect columns
             source_mapping_col = None
@@ -299,15 +284,30 @@ def register_mapping_handlers(registry):
             parent_col = None
             for col in formula_df.columns:
                 col_lower = col.lower()
-                if 'element' in col_lower or 'name' in col_lower or 'item' in col_lower:
+                # Detect element/child column
+                if 'element' in col_lower or 'child' in col_lower:
                     element_col = col
-                if 'parent' in col_lower:
+                # Detect parent/header column (common patterns: "Formula Header", "Parent", "Header")
+                if 'parent' in col_lower or 'header' in col_lower:
                     parent_col = col
 
+            # Fallback: if we have columns like "Formula Header" and "Formula Element"
+            # the first is typically parent, second is element/child
+            if not element_col and not parent_col:
+                # Look for column pairs that suggest parent-child relationship
+                for i, col in enumerate(formula_df.columns):
+                    col_lower = col.lower()
+                    if 'formula' in col_lower and 'header' in col_lower:
+                        parent_col = col
+                    elif 'formula' in col_lower and 'element' in col_lower:
+                        element_col = col
+
             if not element_col:
-                element_col = formula_df.columns[0]
+                # Default: second column (index 1) is typically the element/child
+                element_col = formula_df.columns[1] if len(formula_df.columns) > 1 else formula_df.columns[0]
             if not parent_col:
-                parent_col = formula_df.columns[1] if len(formula_df.columns) > 1 else formula_df.columns[0]
+                # Default: first column (index 0) is typically the parent/header
+                parent_col = formula_df.columns[0]
 
             result = cross_file_validator.rollup_through_hierarchy(
                 source_df=source_df,

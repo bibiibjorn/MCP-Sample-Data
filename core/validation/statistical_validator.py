@@ -8,6 +8,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Token optimization constants
+MAX_BREAKDOWN_ROWS = 20         # Max rows per breakdown level
+SAMPLE_OUTLIER_LIMIT = 10       # Max outlier samples to return
+
 
 class StatisticalValidator:
     """Performs statistical validation on data"""
@@ -50,7 +54,7 @@ class StatisticalValidator:
                 result['difference'] = difference
                 result['matches_expected'] = abs(difference) < 0.01
 
-            # Generate breakdown by groups
+            # Generate breakdown by groups (token-optimized)
             if group_columns:
                 breakdowns = []
                 for i, col in enumerate(group_columns):
@@ -60,14 +64,24 @@ class StatisticalValidator:
                     group_totals = df.group_by(col).agg([
                         pl.col(measure_column).sum().alias('total'),
                         pl.count().alias('count')
-                    ]).sort(col)
+                    ]).sort('total', descending=True)  # Sort by total for relevance
 
-                    breakdowns.append({
-                        'group_column': col,
+                    total_groups = group_totals.height
+                    # Limit output for token efficiency
+                    limited_totals = group_totals.head(MAX_BREAKDOWN_ROWS)
+
+                    breakdown = {
+                        'column': col,
                         'level': i + 1,
-                        'unique_values': group_totals.height,
-                        'totals': group_totals.to_dicts()
-                    })
+                        'groups': total_groups,
+                        'totals': limited_totals.to_dicts()
+                    }
+
+                    if total_groups > MAX_BREAKDOWN_ROWS:
+                        breakdown['truncated'] = True
+                        breakdown['note'] = f'Showing top {MAX_BREAKDOWN_ROWS} of {total_groups}'
+
+                    breakdowns.append(breakdown)
 
                 result['breakdowns'] = breakdowns
 
@@ -159,16 +173,13 @@ class StatisticalValidator:
                     'success': True,
                     'method': 'iqr',
                     'threshold': threshold,
-                    'statistics': {
-                        'q1': q1,
-                        'q3': q3,
-                        'iqr': iqr,
-                        'lower_bound': lower_bound,
-                        'upper_bound': upper_bound
+                    'bounds': {
+                        'lower': round(lower_bound, 2),
+                        'upper': round(upper_bound, 2)
                     },
                     'outlier_count': len(outliers),
-                    'outlier_percentage': round(len(outliers) / len(df) * 100, 2),
-                    'sample_outliers': outliers[column].head(10).to_list()
+                    'outlier_pct': round(len(outliers) / len(df) * 100, 1),
+                    'samples': outliers[column].head(SAMPLE_OUTLIER_LIMIT).to_list()
                 }
 
             elif method == 'zscore':
@@ -180,25 +191,24 @@ class StatisticalValidator:
                         'success': True,
                         'method': 'zscore',
                         'outlier_count': 0,
-                        'message': 'Standard deviation is 0, no outliers detected'
+                        'note': 'Std=0, no outliers'
                     }
 
                 # Calculate z-scores
                 z_scores = (col_data - mean) / std
                 outlier_mask = z_scores.abs() > threshold
-
                 outlier_count = outlier_mask.sum()
 
                 return {
                     'success': True,
                     'method': 'zscore',
                     'threshold': threshold,
-                    'statistics': {
-                        'mean': mean,
-                        'std': std
+                    'stats': {
+                        'mean': round(mean, 2),
+                        'std': round(std, 2)
                     },
                     'outlier_count': outlier_count,
-                    'outlier_percentage': round(outlier_count / len(df) * 100, 2)
+                    'outlier_pct': round(outlier_count / len(df) * 100, 1)
                 }
 
             else:
@@ -206,4 +216,86 @@ class StatisticalValidator:
 
         except Exception as e:
             logger.error(f"Error detecting outliers: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
+
+    def detect_anomalies(
+        self,
+        df: pl.DataFrame,
+        columns: Optional[List[str]] = None,
+        method: str = 'zscore',
+        threshold: float = 3.0
+    ) -> Dict[str, Any]:
+        """
+        Detect statistical anomalies across multiple columns.
+
+        Args:
+            df: DataFrame to analyze
+            columns: Specific columns to analyze (None = all numeric)
+            method: Detection method ('zscore', 'iqr')
+            threshold: Threshold for outlier detection
+
+        Returns:
+            Anomaly detection results
+        """
+        try:
+            # Determine columns to analyze
+            if columns:
+                target_columns = [c for c in columns if c in df.columns]
+            else:
+                # Analyze all numeric columns
+                numeric_types = {pl.Int64, pl.Int32, pl.Int16, pl.Int8,
+                               pl.UInt64, pl.UInt32, pl.UInt16, pl.UInt8,
+                               pl.Float64, pl.Float32}
+                target_columns = [c for c in df.columns if df[c].dtype in numeric_types]
+
+            if not target_columns:
+                return {
+                    'success': True,
+                    'anomalies_detected': False,
+                    'note': 'No numeric columns to analyze'
+                }
+
+            results = {
+                'success': True,
+                'method': method,
+                'threshold': threshold,
+                'columns_analyzed': len(target_columns),
+                'total_rows': len(df),
+                'column_results': []
+            }
+
+            total_anomalies = 0
+
+            for col in target_columns:
+                col_result = self.detect_outliers(df, col, method, threshold)
+
+                if col_result.get('success'):
+                    outlier_count = col_result.get('outlier_count', 0)
+                    total_anomalies += outlier_count
+
+                    column_summary = {
+                        'column': col,
+                        'outlier_count': outlier_count,
+                        'outlier_pct': col_result.get('outlier_pct', 0)
+                    }
+
+                    if 'bounds' in col_result:
+                        column_summary['bounds'] = col_result['bounds']
+                    if 'stats' in col_result:
+                        column_summary['stats'] = col_result['stats']
+                    if 'samples' in col_result:
+                        column_summary['sample_outliers'] = col_result['samples'][:SAMPLE_OUTLIER_LIMIT]
+
+                    results['column_results'].append(column_summary)
+
+            results['total_anomalies'] = total_anomalies
+            results['anomalies_detected'] = total_anomalies > 0
+
+            # Sort by outlier count descending
+            results['column_results'].sort(key=lambda x: -x['outlier_count'])
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error detecting anomalies: {e}", exc_info=True)
             return {'success': False, 'error': str(e)}

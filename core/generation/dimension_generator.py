@@ -14,31 +14,122 @@ logger = logging.getLogger(__name__)
 class DimensionGenerator:
     """Generates dimension tables"""
 
+    # Predefined dimension templates
+    DIMENSION_TEMPLATES = {
+        'customer': [
+            {'name': 'customer_id', 'type': 'integer', 'unique': True},
+            {'name': 'customer_name', 'generator': 'name'},
+            {'name': 'email', 'generator': 'email'},
+            {'name': 'phone', 'generator': 'phone'},
+            {'name': 'city', 'generator': 'city'},
+            {'name': 'state', 'generator': 'state'},
+            {'name': 'country', 'generator': 'country'},
+            {'name': 'segment', 'generator': 'segment'},
+        ],
+        'product': [
+            {'name': 'product_id', 'type': 'integer', 'unique': True},
+            {'name': 'product_name', 'generator': 'product_name'},
+            {'name': 'sku', 'generator': 'sku', 'unique': True},
+            {'name': 'category', 'generator': 'category'},
+            {'name': 'unit_price', 'type': 'decimal'},
+            {'name': 'unit_cost', 'type': 'decimal'},
+        ],
+        'geography': [
+            {'name': 'geography_id', 'type': 'integer', 'unique': True},
+            {'name': 'city', 'generator': 'city'},
+            {'name': 'state', 'generator': 'state'},
+            {'name': 'country', 'generator': 'country'},
+            {'name': 'region', 'generator': 'region'},
+            {'name': 'postal_code', 'generator': 'zipcode'},
+        ],
+        'employee': [
+            {'name': 'employee_id', 'type': 'integer', 'unique': True},
+            {'name': 'first_name', 'generator': 'first_name'},
+            {'name': 'last_name', 'generator': 'last_name'},
+            {'name': 'email', 'generator': 'email'},
+            {'name': 'department', 'generator': 'department'},
+            {'name': 'job_title', 'generator': 'job'},
+            {'name': 'hire_date', 'generator': 'date'},
+        ],
+        'department': [
+            {'name': 'department_id', 'type': 'integer', 'unique': True},
+            {'name': 'department_name', 'generator': 'department', 'unique': True},
+            {'name': 'cost_center', 'type': 'string'},
+        ],
+        'account': [
+            {'name': 'account_id', 'type': 'integer', 'unique': True},
+            {'name': 'account_code', 'type': 'string', 'unique': True},
+            {'name': 'account_name', 'type': 'string'},
+            {'name': 'account_type', 'values': ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']},
+            {'name': 'is_active', 'type': 'boolean'},
+        ],
+        'supplier': [
+            {'name': 'supplier_id', 'type': 'integer', 'unique': True},
+            {'name': 'supplier_name', 'generator': 'company'},
+            {'name': 'contact_name', 'generator': 'name'},
+            {'name': 'phone', 'generator': 'phone'},
+            {'name': 'city', 'generator': 'city'},
+            {'name': 'country', 'generator': 'country'},
+        ],
+        'warehouse': [
+            {'name': 'warehouse_id', 'type': 'integer', 'unique': True},
+            {'name': 'warehouse_name', 'type': 'string'},
+            {'name': 'location', 'generator': 'city'},
+            {'name': 'capacity', 'type': 'integer'},
+            {'name': 'region', 'generator': 'region'},
+        ],
+    }
+
     def __init__(self, locale: str = 'en_US'):
         self.faker = Faker(locale)
         self.locale = locale
 
     def generate(
         self,
-        name: str,
-        columns: List[Dict[str, Any]],
-        row_count: int,
+        name: str = None,
+        columns: List[Dict[str, Any]] = None,
+        row_count: int = 1000,
         output_path: Optional[str] = None,
-        output_format: str = 'csv'
+        output_format: str = 'csv',
+        *,  # Force keyword arguments after this
+        dimension_type: str = None,
+        locale: str = None
     ) -> Dict[str, Any]:
         """
         Generate a dimension table.
 
         Args:
-            name: Table name
-            columns: Column definitions
+            name: Table name (optional if dimension_type provided)
+            columns: Column definitions (optional if dimension_type provided)
             row_count: Number of rows to generate
             output_path: Optional output file path
             output_format: 'csv' or 'parquet'
+            dimension_type: Predefined dimension type (customer, product, etc.)
+            locale: Locale for data generation
 
         Returns:
             Generation result with data
         """
+        # Handle locale override
+        if locale and locale != self.locale:
+            self.faker = Faker(locale)
+            self.locale = locale
+
+        # If dimension_type provided, use template
+        if dimension_type:
+            template = self.DIMENSION_TEMPLATES.get(dimension_type.lower())
+            if not template:
+                return {
+                    'success': False,
+                    'error': f"Unknown dimension type: {dimension_type}. "
+                             f"Available: {', '.join(self.DIMENSION_TEMPLATES.keys())}"
+                }
+            columns = template
+            name = name or f"dim_{dimension_type}"
+
+        if not columns:
+            return {'success': False, 'error': 'Either columns or dimension_type must be provided'}
+
         try:
             data = {}
 
@@ -78,6 +169,7 @@ class DimensionGenerator:
 
             return {
                 'success': True,
+                'df': df,
                 'table_name': name,
                 'row_count': len(df),
                 'columns': df.columns,

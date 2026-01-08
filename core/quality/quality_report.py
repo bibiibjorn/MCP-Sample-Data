@@ -1,0 +1,410 @@
+"""
+Quality Report Generator - Generate detailed quality reports in various formats
+"""
+
+from dataclasses import dataclass
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import json
+from pathlib import Path
+
+from .quality_scorer import QualityScore, QualityReport, DimensionScore
+
+
+class QualityReportGenerator:
+    """Generate quality reports in various formats"""
+
+    def __init__(self):
+        pass
+
+    def generate_markdown(
+        self,
+        report: QualityReport,
+        include_recommendations: bool = True,
+        include_column_details: bool = True
+    ) -> str:
+        """Generate markdown format report"""
+        score = report.score
+        lines = []
+
+        # Header
+        lines.append("# Data Quality Report")
+        lines.append("")
+        lines.append(f"**File:** `{report.file_path}`")
+        lines.append(f"**Generated:** {report.scan_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"**Rows:** {report.row_count:,} | **Columns:** {report.column_count}")
+        lines.append(f"**Scan Duration:** {report.scan_duration_seconds:.2f}s")
+        lines.append("")
+
+        # Overall Score
+        lines.append("## Overall Quality Score")
+        lines.append("")
+        lines.append(f"### {score.grade} ({score.overall_score:.1f}/100)")
+        lines.append("")
+
+        # Score bar visualization
+        filled = int(score.overall_score / 5)
+        empty = 20 - filled
+        bar = "█" * filled + "░" * empty
+        lines.append(f"`{bar}` {score.overall_score:.1f}%")
+        lines.append("")
+
+        # Issue Summary
+        lines.append("### Issue Summary")
+        lines.append("")
+        lines.append(f"- **Critical:** {score.critical_count}")
+        lines.append(f"- **Warning:** {score.warning_count}")
+        lines.append(f"- **Info:** {score.info_count}")
+        lines.append("")
+
+        # Dimension Breakdown
+        lines.append("## Quality Dimensions")
+        lines.append("")
+        lines.append("| Dimension | Score | Weight | Contribution |")
+        lines.append("|-----------|-------|--------|--------------|")
+
+        for dim_name, dim_score in score.dimension_scores.items():
+            icon = self._get_score_icon(dim_score.score)
+            lines.append(
+                f"| {icon} {dim_name.title()} | {dim_score.score:.1f} | "
+                f"{dim_score.weight:.0%} | {dim_score.weighted_contribution:.1f} |"
+            )
+        lines.append("")
+
+        # Dimension Details
+        for dim_name, dim_score in score.dimension_scores.items():
+            lines.append(f"### {dim_name.title()}")
+            lines.append("")
+            lines.append(f"**Score:** {dim_score.score:.1f}/100")
+            lines.append("")
+
+            if dim_score.details:
+                lines.append("**Details:**")
+                for key, value in dim_score.details.items():
+                    if isinstance(value, float):
+                        lines.append(f"- {key.replace('_', ' ').title()}: {value:.2f}")
+                    else:
+                        lines.append(f"- {key.replace('_', ' ').title()}: {value}")
+                lines.append("")
+
+            if dim_score.issues:
+                lines.append("**Issues:**")
+                for issue in dim_score.issues[:5]:  # Limit to 5
+                    severity_icon = {"critical": "🔴", "warning": "🟡", "info": "🔵"}.get(
+                        issue.get('severity', 'info'), "⚪"
+                    )
+                    col = issue.get('column', 'N/A')
+                    desc = issue.get('description', '')
+                    lines.append(f"- {severity_icon} **{col}**: {desc}")
+                lines.append("")
+
+        # Column Quality (if enabled)
+        if include_column_details and score.column_scores:
+            lines.append("## Column Quality Scores")
+            lines.append("")
+            lines.append("| Column | Type | Score | Issues |")
+            lines.append("|--------|------|-------|--------|")
+
+            # Sort by score (lowest first)
+            sorted_cols = sorted(
+                score.column_scores.items(),
+                key=lambda x: x[1].overall_score
+            )
+
+            for col_name, col_score in sorted_cols[:20]:  # Limit to 20
+                icon = self._get_score_icon(col_score.overall_score)
+                issue_count = len(col_score.issues)
+                lines.append(
+                    f"| {icon} {col_name} | {col_score.data_type} | "
+                    f"{col_score.overall_score:.1f} | {issue_count} |"
+                )
+            lines.append("")
+
+        # Recommendations
+        if include_recommendations and score.recommendations:
+            lines.append("## Recommendations")
+            lines.append("")
+            for i, rec in enumerate(score.recommendations, 1):
+                lines.append(f"{i}. {rec}")
+            lines.append("")
+
+        # Footer
+        lines.append("---")
+        lines.append("*Report generated by MCP Sample Data Server - Quality Scoring Module*")
+
+        return "\n".join(lines)
+
+    def generate_html(
+        self,
+        report: QualityReport,
+        include_recommendations: bool = True,
+        include_column_details: bool = True
+    ) -> str:
+        """Generate HTML format report"""
+        score = report.score
+
+        # CSS styles
+        css = """
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                   max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+            .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .grade { font-size: 48px; font-weight: bold; }
+            .grade-A { color: #22c55e; }
+            .grade-B { color: #84cc16; }
+            .grade-C { color: #eab308; }
+            .grade-D { color: #f97316; }
+            .grade-F { color: #ef4444; }
+            .score-bar { background: #e5e7eb; border-radius: 4px; height: 24px; overflow: hidden; }
+            .score-fill { height: 100%; transition: width 0.3s; }
+            .score-fill.high { background: linear-gradient(90deg, #22c55e, #84cc16); }
+            .score-fill.medium { background: linear-gradient(90deg, #eab308, #f97316); }
+            .score-fill.low { background: linear-gradient(90deg, #f97316, #ef4444); }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+            th { background: #f9fafb; font-weight: 600; }
+            .severity-critical { color: #ef4444; font-weight: bold; }
+            .severity-warning { color: #f97316; }
+            .severity-info { color: #3b82f6; }
+            .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+            .badge-critical { background: #fef2f2; color: #ef4444; }
+            .badge-warning { background: #fffbeb; color: #f97316; }
+            .badge-info { background: #eff6ff; color: #3b82f6; }
+            .dimension-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+            .dimension-card { background: #f9fafb; border-radius: 8px; padding: 16px; text-align: center; }
+            .dimension-score { font-size: 24px; font-weight: bold; }
+        </style>
+        """
+
+        # Determine grade class
+        grade_class = f"grade-{score.grade[0]}"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Data Quality Report</title>
+            {css}
+        </head>
+        <body>
+            <div class="card">
+                <h1>Data Quality Report</h1>
+                <p><strong>File:</strong> <code>{report.file_path}</code></p>
+                <p><strong>Generated:</strong> {report.scan_timestamp.strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Rows:</strong> {report.row_count:,} | <strong>Columns:</strong> {report.column_count}</p>
+            </div>
+
+            <div class="card">
+                <h2>Overall Quality Score</h2>
+                <div class="grade {grade_class}">{score.grade}</div>
+                <p style="font-size: 24px;">{score.overall_score:.1f} / 100</p>
+                <div class="score-bar">
+                    <div class="score-fill {'high' if score.overall_score >= 80 else 'medium' if score.overall_score >= 60 else 'low'}"
+                         style="width: {score.overall_score}%"></div>
+                </div>
+                <p style="margin-top: 16px;">
+                    <span class="badge badge-critical">{score.critical_count} Critical</span>
+                    <span class="badge badge-warning">{score.warning_count} Warning</span>
+                    <span class="badge badge-info">{score.info_count} Info</span>
+                </p>
+            </div>
+
+            <div class="card">
+                <h2>Quality Dimensions</h2>
+                <div class="dimension-grid">
+        """
+
+        # Add dimension cards
+        for dim_name, dim_score in score.dimension_scores.items():
+            color = '#22c55e' if dim_score.score >= 80 else '#eab308' if dim_score.score >= 60 else '#ef4444'
+            html += f"""
+                    <div class="dimension-card">
+                        <div class="dimension-score" style="color: {color}">{dim_score.score:.0f}</div>
+                        <div>{dim_name.title()}</div>
+                        <div style="font-size: 12px; color: #6b7280;">Weight: {dim_score.weight:.0%}</div>
+                    </div>
+            """
+
+        html += """
+                </div>
+            </div>
+        """
+
+        # Issues table
+        if score.issues:
+            html += """
+            <div class="card">
+                <h2>Issues Found</h2>
+                <table>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Dimension</th>
+                        <th>Column</th>
+                        <th>Description</th>
+                    </tr>
+            """
+            for issue in score.issues[:20]:
+                html += f"""
+                    <tr>
+                        <td class="severity-{issue.severity}">{issue.severity.upper()}</td>
+                        <td>{issue.dimension}</td>
+                        <td>{issue.column or 'N/A'}</td>
+                        <td>{issue.description}</td>
+                    </tr>
+                """
+            html += """
+                </table>
+            </div>
+            """
+
+        # Recommendations
+        if include_recommendations and score.recommendations:
+            html += """
+            <div class="card">
+                <h2>Recommendations</h2>
+                <ol>
+            """
+            for rec in score.recommendations:
+                html += f"<li>{rec}</li>"
+            html += """
+                </ol>
+            </div>
+            """
+
+        # Column details
+        if include_column_details and score.column_scores:
+            html += """
+            <div class="card">
+                <h2>Column Quality Scores</h2>
+                <table>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Score</th>
+                        <th>Issues</th>
+                    </tr>
+            """
+            sorted_cols = sorted(
+                score.column_scores.items(),
+                key=lambda x: x[1].overall_score
+            )
+            for col_name, col_score in sorted_cols[:20]:
+                color = '#22c55e' if col_score.overall_score >= 80 else '#eab308' if col_score.overall_score >= 60 else '#ef4444'
+                html += f"""
+                    <tr>
+                        <td>{col_name}</td>
+                        <td><code>{col_score.data_type}</code></td>
+                        <td style="color: {color}; font-weight: bold;">{col_score.overall_score:.1f}</td>
+                        <td>{len(col_score.issues)}</td>
+                    </tr>
+                """
+            html += """
+                </table>
+            </div>
+            """
+
+        html += """
+            <div style="text-align: center; color: #6b7280; margin-top: 20px;">
+                <p>Report generated by MCP Sample Data Server - Quality Scoring Module</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        return html
+
+    def generate_json(self, report: QualityReport) -> str:
+        """Generate JSON format report"""
+        score = report.score
+
+        data = {
+            'metadata': {
+                'file_path': report.file_path,
+                'generated_at': report.scan_timestamp.isoformat(),
+                'row_count': report.row_count,
+                'column_count': report.column_count,
+                'scan_duration_seconds': report.scan_duration_seconds,
+                'rules_applied': report.rules_applied
+            },
+            'overall': {
+                'score': score.overall_score,
+                'grade': score.grade,
+                'critical_issues': score.critical_count,
+                'warning_issues': score.warning_count,
+                'info_issues': score.info_count
+            },
+            'dimensions': {},
+            'column_scores': {},
+            'issues': [],
+            'recommendations': score.recommendations
+        }
+
+        # Add dimension scores
+        for dim_name, dim_score in score.dimension_scores.items():
+            data['dimensions'][dim_name] = {
+                'score': dim_score.score,
+                'weight': dim_score.weight,
+                'weighted_contribution': dim_score.weighted_contribution,
+                'column_scores': dim_score.column_scores,
+                'details': dim_score.details,
+                'issue_count': len(dim_score.issues)
+            }
+
+        # Add column scores
+        for col_name, col_score in score.column_scores.items():
+            data['column_scores'][col_name] = {
+                'data_type': col_score.data_type,
+                'overall_score': col_score.overall_score,
+                'dimension_scores': col_score.dimension_scores,
+                'issue_count': len(col_score.issues)
+            }
+
+        # Add issues
+        for issue in score.issues:
+            data['issues'].append({
+                'severity': issue.severity,
+                'dimension': issue.dimension,
+                'column': issue.column,
+                'issue_type': issue.issue_type,
+                'description': issue.description,
+                'affected_rows': issue.affected_rows,
+                'affected_percentage': issue.affected_percentage,
+                'suggested_fix': issue.suggested_fix
+            })
+
+        return json.dumps(data, indent=2)
+
+    def _get_score_icon(self, score: float) -> str:
+        """Get icon for score"""
+        if score >= 90:
+            return "✅"
+        elif score >= 80:
+            return "🟢"
+        elif score >= 70:
+            return "🟡"
+        elif score >= 60:
+            return "🟠"
+        else:
+            return "🔴"
+
+    def save_report(
+        self,
+        report: QualityReport,
+        output_path: str,
+        format: str = 'markdown',
+        **kwargs
+    ):
+        """Save report to file"""
+        path = Path(output_path)
+
+        if format == 'markdown' or format == 'md':
+            content = self.generate_markdown(report, **kwargs)
+        elif format == 'html':
+            content = self.generate_html(report, **kwargs)
+        elif format == 'json':
+            content = self.generate_json(report)
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+
+        path.write_text(content, encoding='utf-8')

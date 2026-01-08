@@ -3,11 +3,14 @@ Polars Engine Module
 Data transformations using Polars
 """
 import polars as pl
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+# Token optimization constants
+SAMPLE_OUTPUT_LIMIT = 50
 
 
 class PolarsEngine:
@@ -207,3 +210,242 @@ class PolarsEngine:
             exprs.append(pl.col(column).cast(pl_type))
 
         return df.with_columns(exprs)
+
+    def transform(
+        self,
+        file_path: str,
+        transformations: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Apply a series of transformations to a data file.
+
+        Args:
+            file_path: Path to the data file
+            transformations: List of transformation definitions
+
+        Returns:
+            Transformation result with 'success' and 'df' keys
+        """
+        try:
+            df = self.load_file(file_path)
+            original_columns = list(df.columns)
+            transforms_executed = []
+
+            for i, transform in enumerate(transformations):
+                # Handle case where transform might be a string (JSON not parsed)
+                if isinstance(transform, str):
+                    import json
+                    try:
+                        transform = json.loads(transform)
+                    except Exception as e:
+                        logger.error(f"Transform {i} is not valid JSON: {e}")
+                        transforms_executed.append({'index': i, 'error': 'invalid JSON string'})
+                        continue
+
+                if not isinstance(transform, dict):
+                    logger.error(f"Transform {i} is not a dict: {type(transform).__name__}")
+                    transforms_executed.append({'index': i, 'error': f'not a dict: {type(transform).__name__}'})
+                    continue
+
+                # Get transform type - check multiple possible key names and normalize
+                transform_type = str(
+                    transform.get('type') or
+                    transform.get('operation') or
+                    transform.get('op') or
+                    ''
+                ).lower().strip()
+
+                # Support both nested config and flat structure
+                config = dict(transform.get('config', {}))
+                # Merge top-level keys into config
+                for key, value in transform.items():
+                    if key not in ('type', 'operation', 'op', 'config') and key not in config:
+                        config[key] = value
+
+                if transform_type == 'filter':
+                    conditions = config.get('conditions', [])
+                    df = self.filter_rows(df, conditions)
+
+                elif transform_type == 'select':
+                    columns = config.get('columns') or config.get('column') or config.get('cols')
+                    if columns:
+                        if isinstance(columns, str):
+                            columns = [columns]
+                        df = df.select(columns)
+                        transforms_executed.append({'type': 'select', 'columns': columns, 'executed': True})
+                    else:
+                        transforms_executed.append({'type': 'select', 'executed': False, 'reason': 'no columns specified'})
+
+                elif transform_type in ('rename', 'rename_column', 'rename_columns'):
+                    renames = config.get('renames', {})
+                    # Also support single column rename with 'old_name' and 'new_name'
+                    if not renames:
+                        old_name = config.get('old_name') or config.get('from') or config.get('column')
+                        new_name = config.get('new_name') or config.get('to') or config.get('name')
+                        if old_name and new_name:
+                            renames = {old_name: new_name}
+                    df = df.rename(renames)
+
+                elif transform_type == 'cast':
+                    casts = config.get('casts', {})
+                    df = self.cast_columns(df, casts)
+
+                elif transform_type == 'aggregate':
+                    group_by = config.get('group_by', [])
+                    aggregations = config.get('aggregations', [])
+                    df = self.aggregate(df, group_by, aggregations)
+
+                elif transform_type == 'sort':
+                    columns = config.get('columns', [])
+                    descending = config.get('descending', False)
+                    df = df.sort(columns, descending=descending)
+
+                elif transform_type == 'fill_null':
+                    column = config.get('column')
+                    strategy = config.get('strategy', 'literal')
+                    value = config.get('value')
+                    if column:
+                        df = self.fill_nulls(df, column, strategy, value)
+
+                elif transform_type == 'add_column':
+                    name = config.get('name')
+                    expression = config.get('expression')
+                    if name and expression:
+                        # Simple expression evaluation
+                        df = df.with_columns(pl.lit(expression).alias(name))
+
+                elif transform_type == 'drop_columns':
+                    columns = config.get('columns', [])
+                    df = df.drop(columns)
+
+                elif transform_type == 'drop_nulls':
+                    columns = config.get('columns')
+                    if columns:
+                        df = df.drop_nulls(subset=columns)
+                    else:
+                        df = df.drop_nulls()
+
+                elif transform_type == 'unique':
+                    columns = config.get('columns')
+                    keep = config.get('keep', 'first')
+                    if columns:
+                        df = df.unique(subset=columns, keep=keep)
+                    else:
+                        df = df.unique(keep=keep)
+
+                elif transform_type == 'limit':
+                    n = config.get('n', 1000)
+                    df = df.head(n)
+                    transforms_executed.append({'type': 'limit', 'n': n, 'executed': True})
+
+                else:
+                    # Unrecognized transform type
+                    logger.warning(f"Unrecognized transform type: '{transform_type}'. Full transform: {transform}")
+                    transforms_executed.append({
+                        'type': transform_type or '(empty)',
+                        'executed': False,
+                        'reason': 'unrecognized transform type',
+                        'raw_transform': transform
+                    })
+
+            return {
+                'success': True,
+                'df': df,
+                'row_count': len(df),
+                'columns': list(df.columns),
+                'original_columns': original_columns,
+                'transformations_applied': len(transformations),
+                'transforms_executed': transforms_executed
+            }
+
+        except Exception as e:
+            logger.error(f"Error transforming data: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
+
+    def union_files(
+        self,
+        file_paths: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Union multiple files into a single DataFrame.
+
+        Args:
+            file_paths: List of file paths to union
+
+        Returns:
+            Union result with 'success' and 'df' keys
+        """
+        try:
+            dfs = []
+            for path in file_paths:
+                df = self.load_file(path)
+                dfs.append(df)
+
+            if not dfs:
+                return {'success': False, 'error': 'No files provided'}
+
+            # Concat all dataframes
+            result_df = pl.concat(dfs, how='vertical_relaxed')
+
+            return {
+                'success': True,
+                'df': result_df,
+                'row_count': len(result_df),
+                'columns': result_df.columns,
+                'source_files': len(file_paths)
+            }
+
+        except Exception as e:
+            logger.error(f"Error unioning files: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
+
+    def join_files(
+        self,
+        file_paths: List[str],
+        join_keys: List[str],
+        how: str = 'inner'
+    ) -> Dict[str, Any]:
+        """
+        Join multiple files on common keys.
+
+        Args:
+            file_paths: List of file paths to join
+            join_keys: Column names to join on
+            how: Join type ('inner', 'left', 'outer', 'cross')
+
+        Returns:
+            Join result with 'success' and 'df' keys
+        """
+        try:
+            if len(file_paths) < 2:
+                return {'success': False, 'error': 'At least 2 files required for join'}
+
+            dfs = [self.load_file(path) for path in file_paths]
+
+            # Start with first dataframe
+            result_df = dfs[0]
+
+            # Join subsequent dataframes
+            for i, df in enumerate(dfs[1:], 1):
+                # Suffix duplicate columns
+                suffix = f"_file{i}"
+                result_df = result_df.join(
+                    df,
+                    on=join_keys,
+                    how=how,
+                    suffix=suffix
+                )
+
+            return {
+                'success': True,
+                'df': result_df,
+                'row_count': len(result_df),
+                'columns': result_df.columns,
+                'source_files': len(file_paths),
+                'join_keys': join_keys,
+                'join_type': how
+            }
+
+        except Exception as e:
+            logger.error(f"Error joining files: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}

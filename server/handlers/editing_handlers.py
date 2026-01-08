@@ -8,6 +8,7 @@ import os
 
 from core.editing import DuckDBEngine, PolarsEngine, QueryBuilder
 from server.tool_schemas import TOOL_SCHEMAS
+from server.handlers.file_utils import truncate_row_data, DEFAULT_ROW_LIMIT
 
 
 def register_editing_handlers(registry):
@@ -23,12 +24,14 @@ def register_editing_handlers(registry):
         query: str,
         output_path: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Query data using SQL"""
+        """Query data using SQL with token-optimized output"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            result = duckdb_engine.query(file_path, query)
+            # When exporting to file, don't limit results; otherwise use default limit
+            export_limit = 10000000 if output_path else None  # 10M rows max for export
+            result = duckdb_engine.query(file_path, query, limit=export_limit)
 
             if not result['success']:
                 return result
@@ -51,12 +54,21 @@ def register_editing_handlers(registry):
                     'columns': df.columns
                 }
 
-            return {
+            # Token-optimized: limit rows and truncate long strings
+            total_rows = len(df)
+            sample_df = df.head(DEFAULT_ROW_LIMIT)
+            response = {
                 'success': True,
-                'row_count': len(df),
+                'row_count': total_rows,
                 'columns': df.columns,
-                'data': df.head(100).to_dicts()
+                'data': truncate_row_data(sample_df.to_dicts())
             }
+
+            if total_rows > DEFAULT_ROW_LIMIT:
+                response['truncated'] = True
+                response['note'] = f'Showing {DEFAULT_ROW_LIMIT} of {total_rows} rows. Use output_path to save full results.'
+
+            return response
 
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -163,7 +175,9 @@ def register_editing_handlers(registry):
 
             # Write output if specified
             target_path = output_path or file_path
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            target_dir = os.path.dirname(target_path)
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
 
             ext = os.path.splitext(target_path)[1].lower()
             if ext == '.csv':
@@ -171,13 +185,19 @@ def register_editing_handlers(registry):
             elif ext == '.parquet':
                 df.write_parquet(target_path)
 
-            return {
+            response = {
                 'success': True,
                 'output_path': target_path,
                 'row_count': len(df),
-                'columns': df.columns,
+                'columns': list(df.columns),
                 'transformations_applied': len(transformations)
             }
+            # Include diagnostic info if available
+            if 'original_columns' in result:
+                response['original_columns'] = result['original_columns']
+            if 'transforms_executed' in result:
+                response['transforms_executed'] = result['transforms_executed']
+            return response
 
         except Exception as e:
             return {'success': False, 'error': str(e)}

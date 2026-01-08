@@ -9,6 +9,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Token optimization constants
+SAMPLE_VIOLATION_LIMIT = 5      # Max sample violations per rule
+INVALID_VALUES_LIMIT = 10       # Max invalid values to show
+MAX_VALUE_LENGTH = 50           # Truncate long values in output
+
+
+def _truncate_value(val: Any, max_len: int = MAX_VALUE_LENGTH) -> Any:
+    """Truncate long string values for token efficiency."""
+    if isinstance(val, str) and len(val) > max_len:
+        return val[:max_len - 3] + '...'
+    return val
+
+
+def _truncate_list(items: List[Any], limit: int = SAMPLE_VIOLATION_LIMIT) -> List[Any]:
+    """Truncate list and truncate individual string values."""
+    return [_truncate_value(v) for v in items[:limit]]
+
 
 class RuleEngine:
     """Engine for applying validation rules to data"""
@@ -191,9 +208,11 @@ class RuleEngine:
             # Filter non-matching values
             non_matching = df.filter(~pl.col(col).cast(pl.Utf8).str.contains(pattern))
             if len(non_matching) > 0:
+                # Token-efficient: limit samples and truncate long values
+                sample_values = non_matching[col].head(SAMPLE_VIOLATION_LIMIT).to_list()
                 violations[col] = {
                     'non_matching_count': len(non_matching),
-                    'sample_non_matching': non_matching[col].head(5).to_list()
+                    'samples': _truncate_list(sample_values)
                 }
 
         return {
@@ -251,14 +270,15 @@ class RuleEngine:
             invalid_values = unique_values - set(allowed_values)
 
             if invalid_values:
+                # Token-efficient: limit and truncate invalid values
                 violations[col] = {
-                    'invalid_values': list(invalid_values)[:10],
-                    'invalid_count': len(invalid_values)
+                    'invalid_count': len(invalid_values),
+                    'samples': _truncate_list(list(invalid_values), INVALID_VALUES_LIMIT)
                 }
 
         return {
             'passed': len(violations) == 0,
-            'allowed_values': allowed_values,
+            'allowed_count': len(allowed_values),
             'columns_checked': columns,
             'violations': violations
         }

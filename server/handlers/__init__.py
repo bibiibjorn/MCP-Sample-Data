@@ -5,8 +5,10 @@ from .editing_handlers import register_editing_handlers
 from .validation_handlers import register_validation_handlers
 from .mapping_handlers import register_mapping_handlers
 from .export_handlers import register_export_handlers
-from .project_handlers import register_project_handlers
 from .help_handlers import register_help_handlers
+from .quality_handlers import register_quality_handlers
+from .privacy_handlers import register_privacy_handlers
+from .subsetting_handlers import register_subsetting_handlers
 
 
 def register_all_handlers(registry):
@@ -17,8 +19,10 @@ def register_all_handlers(registry):
     register_validation_handlers(registry)
     register_mapping_handlers(registry)
     register_export_handlers(registry)
-    register_project_handlers(registry)
     register_help_handlers(registry)
+    register_quality_handlers(registry)
+    register_privacy_handlers(registry)
+    register_subsetting_handlers(registry)
 
 
 __all__ = [
@@ -29,6 +33,8 @@ __all__ = [
     'register_validation_handlers',
     'register_mapping_handlers',
     'register_export_handlers',
-    'register_project_handlers',
-    'register_help_handlers'
+    'register_help_handlers',
+    'register_quality_handlers',
+    'register_privacy_handlers',
+    'register_subsetting_handlers'
 ]

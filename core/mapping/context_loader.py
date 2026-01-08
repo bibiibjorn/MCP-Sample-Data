@@ -6,8 +6,16 @@ import polars as pl
 from typing import Dict, Any, List, Optional
 import logging
 import os
+import re
+
+from core.config.config_manager import config
 
 logger = logging.getLogger(__name__)
+
+# Token optimization constants - loaded from config
+DEFAULT_QUERY_LIMIT = config.get('editing.default_query_limit', 1000)
+MAX_QUERY_LIMIT = config.get('editing.max_query_limit', 200000)
+SAMPLE_PREVIEW_LIMIT = config.get('editing.sample_limit', 50)
 
 
 class ContextLoader:
@@ -135,9 +143,22 @@ class ContextLoader:
     def query_context(
         self,
         context_name: str,
-        query: str
+        query: str,
+        limit: Optional[int] = None,
+        include_data: bool = True
     ) -> Dict[str, Any]:
-        """Execute a SQL query on context files using DuckDB"""
+        """
+        Execute a SQL query on context files using DuckDB.
+
+        Args:
+            context_name: Name of the loaded context
+            query: SQL query to execute
+            limit: Maximum rows to return (default: 100, max: 1000)
+            include_data: Whether to include row data in response (set False for counts only)
+
+        Returns:
+            Query results with automatic row limiting for token efficiency
+        """
         import duckdb
 
         context = self.contexts.get(context_name)
@@ -151,19 +172,62 @@ class ContextLoader:
             for alias, info in context['files'].items():
                 conn.register(alias, info['df'].to_pandas())
 
-            # Execute query
-            result = conn.execute(query).pl()
+            # Determine effective limit
+            if limit is not None:
+                # User specified limit - cap at max if set
+                effective_limit = min(limit, MAX_QUERY_LIMIT) if MAX_QUERY_LIMIT else limit
+            else:
+                # Use default
+                effective_limit = DEFAULT_QUERY_LIMIT
 
-            return {
+            # Check if query already has LIMIT clause
+            query_upper = query.upper().strip()
+            has_limit = bool(re.search(r'\bLIMIT\s+\d+', query_upper))
+
+            # Execute query to get full count first (for metadata)
+            result = conn.execute(query).pl()
+            total_rows = len(result)
+
+            # Apply limit if not already in query
+            if not has_limit and total_rows > effective_limit:
+                result = result.head(effective_limit)
+                was_truncated = True
+            else:
+                was_truncated = False
+
+            response = {
                 'success': True,
-                'row_count': len(result),
+                'row_count': total_rows,
                 'columns': result.columns,
-                'data': result.to_dicts()
+                'returned_rows': len(result)
             }
+
+            if was_truncated:
+                response['truncated'] = True
+                response['note'] = f'Results limited to {effective_limit} rows. Use LIMIT in query or set limit parameter for different size.'
+
+            if include_data:
+                # Truncate long string values for token efficiency
+                data = result.to_dicts()
+                response['data'] = self._truncate_row_strings(data)
+            else:
+                response['data_omitted'] = True
+                response['note'] = 'Set include_data=True to see row data'
+
+            return response
 
         except Exception as e:
             logger.error(f"Error querying context: {e}", exc_info=True)
             return {'success': False, 'error': str(e)}
+
+    def _truncate_row_strings(self, rows: List[Dict], max_len: int = 100) -> List[Dict]:
+        """Truncate long string values in row data for token efficiency."""
+        def truncate(val):
+            if isinstance(val, str) and len(val) > max_len:
+                return val[:max_len - 3] + '...'
+            return val
+
+        return [{k: truncate(v) for k, v in row.items()} for row in rows]
 
     def _load_file(self, path: str) -> pl.DataFrame:
         """Load a file into a DataFrame"""

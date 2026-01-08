@@ -131,6 +131,13 @@ class SchemaInferrer:
 
         return recommendations
 
+    # Alias for handler compatibility
+    def infer_schema(self, df: pl.DataFrame) -> Dict[str, Any]:
+        """Alias for infer() method - for handler compatibility"""
+        result = self.infer(df)
+        result['success'] = True
+        return result
+
 
 def infer_schema(df: pl.DataFrame, target: str = 'powerbi') -> Dict[str, Any]:
     """Convenience function to infer schema"""

@@ -3,7 +3,22 @@
     "allow": [
       "Bash(git remote add:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(cat:*)",
+      "Bash(venv/Scripts/pip.exe install:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)",
+      "Bash(venvScriptspython.exe -c \"\nfrom core.generation.fact_generator import FactGenerator\nimport polars as pl\n\nfg = FactGenerator\\(\\)\n\n# Test with empty dimensions\nresult = fg.generate_from_type\\(\n    fact_type=''sales'',\n    dimensions={},\n    row_count=5\n\\)\n\nif result[''success'']:\n    print\\(''SUCCESS!''\\)\n    print\\(''Columns:'', result[''columns'']\\)\n    print\\(\\)\n    print\\(''Sample data:''\\)\n    for row in result[''sample_data'']:\n        print\\(row\\)\nelse:\n    print\\(''ERROR:'', result.get\\(''error''\\)\\)\n\")",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

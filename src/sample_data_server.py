@@ -19,6 +19,7 @@ from server.dispatch import ToolDispatcher
 from server.resources import ResourceManager
 from server.handlers import register_all_handlers
 from server.tool_schemas import get_all_schemas
+from server.handlers.file_utils import safe_response
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +61,9 @@ def create_server() -> Server:
         logger.debug(f"Arguments: {arguments}")
 
         result = await dispatcher.dispatch(name, arguments or {})
+
+        # Apply response size safety to prevent MCP token limit issues
+        result = safe_response(result)
 
         # Format result
         import json

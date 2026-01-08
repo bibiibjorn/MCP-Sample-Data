@@ -6,7 +6,6 @@ from .editing import DuckDBEngine, PolarsEngine, QueryBuilder
 from .validation import RuleEngine, BalanceChecker, ReferentialChecker, StatisticalValidator
 from .mapping import MappingDiscovery, MappingManager, HierarchyAnalyzer, ContextLoader, CrossFileValidator
 from .export import CSVExporter, ParquetExporter, PowerBIOptimizer
-from .storage import ProjectManager, FileManager, CacheManager
 
 __all__ = [
     # Config
@@ -22,7 +21,5 @@ __all__ = [
     # Mapping
     'MappingDiscovery', 'MappingManager', 'HierarchyAnalyzer', 'ContextLoader', 'CrossFileValidator',
     # Export
-    'CSVExporter', 'ParquetExporter', 'PowerBIOptimizer',
-    # Storage
-    'ProjectManager', 'FileManager', 'CacheManager'
+    'CSVExporter', 'ParquetExporter', 'PowerBIOptimizer'
 ]

@@ -8,6 +8,7 @@ import os
 
 from core.validation import RuleEngine, BalanceChecker, ReferentialChecker, StatisticalValidator
 from server.tool_schemas import TOOL_SCHEMAS
+from server.handlers.file_utils import read_data_file
 
 
 def register_validation_handlers(registry):
@@ -23,18 +24,12 @@ def register_validation_handlers(registry):
         file_path: str,
         rules: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Validate data against rules"""
+        """Validate data against rules (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = rule_engine.validate(df, rules)
             result['file_path'] = file_path
@@ -60,31 +55,20 @@ def register_validation_handlers(registry):
         dimension_files: Dict[str, str],
         key_mappings: Dict[str, str]
     ) -> Dict[str, Any]:
-        """Check referential integrity"""
+        """Check referential integrity (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(fact_file):
             return {'success': False, 'error': f'Fact file not found: {fact_file}'}
 
         try:
             # Load fact table
-            ext = os.path.splitext(fact_file)[1].lower()
-            if ext == '.csv':
-                fact_df = pl.read_csv(fact_file)
-            elif ext == '.parquet':
-                fact_df = pl.read_parquet(fact_file)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            fact_df = read_data_file(fact_file)
 
             # Load dimension tables
             dimensions = {}
             for name, path in dimension_files.items():
                 if not os.path.exists(path):
                     return {'success': False, 'error': f'Dimension file not found: {path}'}
-
-                ext = os.path.splitext(path)[1].lower()
-                if ext == '.csv':
-                    dimensions[name] = pl.read_csv(path)
-                elif ext == '.parquet':
-                    dimensions[name] = pl.read_parquet(path)
+                dimensions[name] = read_data_file(path)
 
             result = referential_checker.check(
                 fact_df=fact_df,
@@ -114,18 +98,12 @@ def register_validation_handlers(registry):
         credit_column: str,
         group_by: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Validate financial balances"""
+        """Validate financial balances (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = balance_checker.check(
                 df=df,
@@ -157,18 +135,12 @@ def register_validation_handlers(registry):
         columns: Optional[List[str]] = None,
         method: str = 'zscore'
     ) -> Dict[str, Any]:
-        """Detect statistical anomalies"""
+        """Detect statistical anomalies (supports CSV, Excel, and Parquet)"""
         if not os.path.exists(file_path):
             return {'success': False, 'error': f'File not found: {file_path}'}
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.csv':
-                df = pl.read_csv(file_path)
-            elif ext == '.parquet':
-                df = pl.read_parquet(file_path)
-            else:
-                return {'success': False, 'error': f'Unsupported format: {ext}'}
+            df = read_data_file(file_path)
 
             result = statistical_validator.detect_anomalies(
                 df=df,

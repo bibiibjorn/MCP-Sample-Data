@@ -1,0 +1,235 @@
+# Operational and Industrial Time Series Patterns
+# Use these patterns for manufacturing, logistics, and operations data
+
+manufacturing_shift:
+  description: Manufacturing production with shift patterns
+  daily_weights:
+    0: 0.0    # Midnight
+    1: 0.0
+    2: 0.0
+    3: 0.0
+    4: 0.0
+    5: 0.1    # Early prep
+    6: 0.3    # First shift starts
+    7: 0.8
+    8: 1.0    # Full production
+    9: 1.0
+    10: 1.0
+    11: 0.9   # Lunch slowdown
+    12: 0.7
+    13: 0.9   # Afternoon ramp
+    14: 1.0   # Second shift
+    15: 1.0
+    16: 0.9
+    17: 0.8
+    18: 0.6   # Evening wind down
+    19: 0.4
+    20: 0.3
+    21: 0.2
+    22: 0.1   # Third shift (if any)
+    23: 0.0
+  day_of_week:
+    monday: 1.0
+    tuesday: 1.0
+    wednesday: 1.0
+    thursday: 1.0
+    friday: 0.9
+    saturday: 0.3   # Maintenance/partial
+    sunday: 0.0
+  noise_std: 0.05
+
+logistics_shipping:
+  description: Logistics and shipping volumes
+  day_of_week:
+    monday: 0.95
+    tuesday: 1.10   # Tuesday surge
+    wednesday: 1.15  # Mid-week peak
+    thursday: 1.10
+    friday: 0.90
+    saturday: 0.60
+    sunday: 0.20
+  monthly_weights:
+    1: 0.85
+    2: 0.85
+    3: 0.95
+    4: 1.00
+    5: 1.05
+    6: 1.00
+    7: 0.95
+    8: 1.05   # Back to school
+    9: 1.10   # Q3 ramp
+    10: 1.15  # Pre-holiday
+    11: 1.35  # Peak season
+    12: 1.40  # Holiday rush
+  special_events:
+    - name: Black Friday Week
+      date: fourth_thursday_november
+      multiplier: 2.0
+      duration_days: 7
+    - name: Christmas Rush
+      date: 12-15
+      multiplier: 1.8
+      duration_days: 10
+  noise_std: 0.08
+
+healthcare_visits:
+  description: Healthcare patient visits pattern
+  day_of_week:
+    monday: 1.30   # Monday surge
+    tuesday: 1.10
+    wednesday: 1.00
+    thursday: 1.00
+    friday: 0.90
+    saturday: 0.50   # Urgent care only
+    sunday: 0.20     # Emergency only
+  monthly_weights:
+    1: 1.20   # Flu season peak
+    2: 1.15
+    3: 1.05
+    4: 0.90
+    5: 0.85
+    6: 0.80   # Summer low
+    7: 0.75
+    8: 0.80
+    9: 0.95   # Back to school
+    10: 1.00
+    11: 1.10
+    12: 1.15  # Holiday stress/flu
+  noise_std: 0.15
+
+call_center_volume:
+  description: Customer service call center volume
+  daily_weights:
+    0: 0.05
+    1: 0.02
+    2: 0.01
+    3: 0.01
+    4: 0.02
+    5: 0.05
+    6: 0.15
+    7: 0.35
+    8: 0.65
+    9: 0.90
+    10: 1.00   # Peak morning
+    11: 0.95
+    12: 0.75   # Lunch dip
+    13: 0.85
+    14: 0.90
+    15: 0.85
+    16: 0.75
+    17: 0.55
+    18: 0.35
+    19: 0.25
+    20: 0.15
+    21: 0.10
+    22: 0.08
+    23: 0.05
+  day_of_week:
+    monday: 1.30   # Weekend backlog
+    tuesday: 1.05
+    wednesday: 1.00
+    thursday: 0.95
+    friday: 0.90
+    saturday: 0.50
+    sunday: 0.30
+  monthly_weights:
+    1: 1.20   # Post-holiday returns
+    2: 0.95
+    3: 1.00
+    4: 1.00
+    5: 0.95
+    6: 0.90
+    7: 0.90
+    8: 0.95
+    9: 1.00
+    10: 1.05
+    11: 1.10
+    12: 1.25  # Holiday inquiries
+  noise_std: 0.12
+
+energy_consumption:
+  description: Energy/utility consumption pattern
+  daily_weights:
+    0: 0.60
+    1: 0.55
+    2: 0.50
+    3: 0.50
+    4: 0.55
+    5: 0.65
+    6: 0.80
+    7: 0.95
+    8: 1.00
+    9: 1.00
+    10: 1.00
+    11: 1.05
+    12: 1.00
+    13: 1.00
+    14: 1.05   # Afternoon peak
+    15: 1.10
+    16: 1.10
+    17: 1.15   # Evening peak
+    18: 1.20
+    19: 1.15
+    20: 1.00
+    21: 0.85
+    22: 0.75
+    23: 0.65
+  day_of_week:
+    monday: 1.00
+    tuesday: 1.00
+    wednesday: 1.00
+    thursday: 1.00
+    friday: 0.95
+    saturday: 0.80
+    sunday: 0.75
+  monthly_weights:
+    1: 1.30   # Winter heating
+    2: 1.25
+    3: 1.05
+    4: 0.85
+    5: 0.80
+    6: 0.95   # Summer cooling starts
+    7: 1.15   # Summer peak
+    8: 1.20
+    9: 0.95
+    10: 0.85
+    11: 1.00
+    12: 1.25  # Winter heating
+  noise_std: 0.08
+
+website_traffic:
+  description: Website traffic pattern
+  daily_weights:
+    0: 0.30
+    1: 0.20
+    2: 0.15
+    3: 0.12
+    4: 0.15
+    5: 0.25
+    6: 0.45
+    7: 0.70
+    8: 0.90
+    9: 1.00
+    10: 1.05
+    11: 1.00
+    12: 0.85   # Lunch browse
+    13: 0.95
+    14: 1.00
+    15: 0.95
+    16: 0.90
+    17: 0.80
+    18: 0.70
+    19: 0.75
+    20: 0.85   # Evening surge
+    21: 0.90
+    22: 0.75
+    23: 0.50
+  day_of_week:
+    monday: 1.10
+    tuesday: 1.05
+    wednesday: 1.00
+    thursday: 1.00
+    friday: 0.90
+    saturday: 0.75
+    sunday: 0.85
+  noise_std: 0.15
